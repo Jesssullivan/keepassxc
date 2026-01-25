@@ -1414,6 +1414,26 @@ void DatabaseWidget::mergeDatabase(bool accepted)
         connect(mergeDialog, &MergeDialog::databaseMerged, [this](bool changed) {
             if (changed) {
                 showMessage(tr("Successfully merged the selected database."), MessageWidget::Positive);
+
+                // Explicitly refresh GUI views after merge to ensure all changes are visible
+                // The group tree view is automatically updated via GroupModel's database signals,
+                // but we need to refresh the entry view and preview pane
+                if (isSearchActive()) {
+                    // Refresh search results to include any new/modified entries
+                    refreshSearch();
+                } else {
+                    // Refresh the current group's entry list
+                    m_entryView->displayGroup(currentGroup());
+                }
+
+                // Update the preview pane with the current selection or group
+                auto selectedEntry = currentSelectedEntry();
+                if (selectedEntry) {
+                    m_previewView->setEntry(selectedEntry);
+                } else {
+                    m_previewView->setGroup(currentGroup());
+                }
+
                 emit databaseMerged(m_db);
             } else {
                 showMessage(tr("No changes were made by the merge operation."), MessageWidget::Information);
