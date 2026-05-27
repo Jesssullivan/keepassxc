@@ -19,6 +19,7 @@
 
 #include "config-keepassx-tests.h"
 #include "core/Bootstrap.h"
+#include "core/ClipboardMime.h"
 #include "core/Config.h"
 #include "core/Group.h"
 #include "core/Metadata.h"
@@ -655,6 +656,12 @@ void TestCli::testClip()
     m_stderr->readLine(); // Skip password prompt
     QCOMPARE(m_stderr->readAll(), QByteArray());
     QTRY_COMPARE(clipboard->text(), QString("Password"));
+    const auto secretFormats = ClipboardMime::secretFormats();
+    const auto* mimeData = clipboard->mimeData(QClipboard::Clipboard);
+    QVERIFY(mimeData);
+    for (const auto& format : secretFormats) {
+        QVERIFY2(mimeData->hasFormat(format), qPrintable(format));
+    }
     QCOMPARE(m_stdout->readLine(), QByteArray("Entry's \"Password\" attribute copied to the clipboard!\n"));
 
     // Quiet option
