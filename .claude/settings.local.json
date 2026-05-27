@@ -1,0 +1,19 @@
+{
+  "gitCoauthor": false,
+  "permissions": {
+    "allow": [
+      "Bash(open*)",
+      "Bash(ls*)",
+      "Bash(cat*)",
+      "Bash(head*)",
+      "Bash(tail*)"
+    ]
+  },
+  "context": {
+    "include": [
+      "CLAUDE.md",
+      "INSTALL.md",
+      ".github/CONTRIBUTING.md"
+    ]
+  }
+}

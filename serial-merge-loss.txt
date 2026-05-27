@@ -1,0 +1,19 @@
+❯ installed asciidoctor.  it is now time to deeply examine the behavior of a possible
+  (likely?) bug in planning and reserach mode.  I have two similar keepassxc databases in a
+  usb card plugged into this computer.  the sdcard has three partitions:  an apfs, fat,
+  and exfat.  the fat and exfat partitions have similar / same keepass dbs, each with the
+  same password (Jess.647699).  I had added new contents- contiaintinig the string yubi and
+  5 into one of these, they diverged over the course of a day or two (some new entriesa
+  dded only to one or the other).  I then proceeeded to use the marge from databases
+  option- first to ssync from one to the other, then sync the newly merged db back to the
+  original.  THis caused both of the databases to not conain ANY of the new entries.  the
+  goal for us is twofold, that should be tackled by 3 opus agents in parallel:  1.  design
+  a hermedic test inline with the current test suites and structures in this repo to model
+  this behavior, with the relavent permutations (1. two identical kdbx, both have uniqu
+  additions, one merge to the other, merged db merged ack into the first, see of both now
+  have all entires from both, 2. same test but with fat + exfat fs mounts 3. same test but
+  via explicent usb / sd parition sceme like we have) 2. deep dive into the code and web
+  search for issues, bugs, references to similar behavior here that we've observed, try to
+  model and reason about why this may have occured based on the code and 3. attempt to
+  recover the lost entries (unlikely to be possible, they appear to be gone but worth a
+  shot)
