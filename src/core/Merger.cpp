@@ -645,8 +645,14 @@ Merger::ChangeList Merger::mergeDeletions(const MergeContext& context)
     while (!entries.isEmpty()) {
         auto* entry = entries.takeFirst();
         const auto& object = mergedDeletions[entry->uuid()];
-        if (entry->timeInfo().lastModificationTime() > object.deletionTime) {
-            // keep deleted entry since it was changed after deletion date
+        // Consider both modification time and location change time to determine
+        // if the entry should survive deletion propagation. An entry may have been
+        // re-added (locationChanged updated) even if lastModificationTime is older.
+        // Use >= to handle FAT filesystem timestamp precision (2-second resolution).
+        QDateTime entryRelevantTime = qMax(entry->timeInfo().lastModificationTime(),
+                                           entry->timeInfo().locationChanged());
+        if (entryRelevantTime >= object.deletionTime) {
+            // keep entry since it was changed/moved at or after deletion date
             continue;
         }
         deletions << object;
@@ -668,8 +674,12 @@ Merger::ChangeList Merger::mergeDeletions(const MergeContext& context)
             continue;
         }
         const auto& object = mergedDeletions[group->uuid()];
-        if (group->timeInfo().lastModificationTime() > object.deletionTime) {
-            // keep deleted group since it was changed after deletion date
+        // Consider both modification time and location change time to determine
+        // if the group should survive deletion propagation. Use >= for timestamp precision.
+        QDateTime groupRelevantTime = qMax(group->timeInfo().lastModificationTime(),
+                                           group->timeInfo().locationChanged());
+        if (groupRelevantTime >= object.deletionTime) {
+            // keep group since it was changed/moved at or after deletion date
             continue;
         }
         if (!group->entriesRecursive(false).isEmpty() || !group->groupsRecursive(false).isEmpty()) {
