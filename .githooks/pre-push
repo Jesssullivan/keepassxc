@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+remote_name="${1:-}"
+remote_url="${2:-}"
+base_ref="${KEEPASSXC_UPSTREAM_BASE:-upstream/develop}"
+
+fork_only_paths=(
+  ".envrc"
+  "flake.nix"
+  "flake.lock"
+  ".githooks/"
+  "scripts/fork-only/"
+)
+
+if [[ "$remote_url" == *"keepassxreboot/keepassxc"* ]]; then
+  cat >&2 <<'EOF'
+Refusing to push directly to keepassxreboot/keepassxc.
+Push to the fork, then open upstream PRs manually from clean upstream-based branches.
+EOF
+  exit 1
+fi
+
+if ! git rev-parse --verify --quiet "$base_ref" >/dev/null; then
+  exit 0
+fi
+
+while read -r local_ref local_oid remote_ref remote_oid; do
+  [[ "$local_oid" == 0000000000000000000000000000000000000000 ]] && continue
+
+  changed="$(git diff --name-only "$base_ref...$local_oid" -- "${fork_only_paths[@]}" || true)"
+  [[ -z "$changed" ]] && continue
+
+  case "$local_ref" in
+    refs/heads/fork/*|refs/heads/develop)
+      ;;
+    *)
+      cat >&2 <<EOF
+Refusing to push $local_ref because it carries fork-only tooling files:
+$changed
+
+Use a fork/* branch for fork-only tooling, or rebase the branch onto $base_ref
+before using it for an upstream KeePassXC PR.
+EOF
+      exit 1
+      ;;
+  esac
+done
