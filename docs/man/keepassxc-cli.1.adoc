@@ -191,6 +191,9 @@ It provides the ability to query and modify the entries of a KeePass database, d
 === Add and edit options
 The same password generation options as documented for the generate command can be used with those 2 commands when the *-g* option is set.
 
+Custom attribute names are case-sensitive.
+The default attributes (Title, UserName, Password, URL, Notes) and the field names Uuid and Tags, in any letter case, as well as passkey attributes (KPEX_PASSKEY_*), cannot be used as custom attribute names with the *-a*, *-A*, *--protect* and *--unprotect* options; use the dedicated options for the default attributes instead.
+
 *-u*, *--username* <__username__>::
   Specifies the username of the entry.
 
@@ -206,9 +209,33 @@ The same password generation options as documented for the generate command can 
 *-g*, *--generate*::
   Generates a new password for the entry.
 
+*-a*, *--attribute* <__attribute__=__value__>::
+  Sets the custom attribute _attribute_ of the entry to _value_.
+  The value is a single line and is stored as given; unlike *--notes*, `\n` is not converted to a line break.
+  An existing attribute is overwritten and keeps its protection.
+  This option can be specified more than once, but each attribute can only be given once across *-a* and *-A*.
+  Command line arguments can be visible to other processes on the system and are often kept in the shell history, so use *-A* for secret values.
+
+*-A*, *--attribute-prompt* <__attribute__>::
+  Uses a prompt for the value of the custom attribute _attribute_ of the entry.
+  Values are a single line each and are read in the given order, after the database password when it is prompted for and after the entry's password when *-p* is set.
+  The command fails without changing the entry if the input ends before a value is read.
+  This option can be specified more than once.
+
+*--protect* <__attribute__>::
+  Protects the custom attribute _attribute_ of the entry.
+  The attribute must be set with *-a* or *-A*, or must already exist on the entry being edited.
+  Protecting an attribute set with *-a* prints a warning, since its value was already given on the command line.
+  This option can be specified more than once.
+
 === Edit options
 *-t*, *--title* <__title__>::
   Specifies the title of the entry.
+
+*--unprotect* <__attribute__>::
+  Removes the protection from the custom attribute _attribute_ of the entry.
+  The attribute must be set with *-a* or *-A*, or must already exist on the entry, and cannot also be given to *--protect*.
+  This option can be specified more than once.
 
 === Estimate options
 *-a*, *--advanced*::

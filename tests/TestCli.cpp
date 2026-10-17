@@ -209,7 +209,7 @@ void TestCli::setInput(const QString& input)
 
 void TestCli::setInput(const QStringList& input)
 {
-    auto ba = input.join("\n").toLatin1();
+    auto ba = input.join("\n").toUtf8();
     // Always end in newline
     if (!ba.endsWith("\n")) {
         ba.append("\n");
@@ -385,6 +385,173 @@ void TestCli::testAdd()
     QVERIFY(entry);
     QCOMPARE(entry->username(), QString("newuser5"));
     QCOMPARE(entry->notes(), QString("test\nnew line"));
+
+    // Custom attributes
+    setInput({"a", "secretvalue"});
+    execCmd(addCmd,
+            {"add",
+             "-a",
+             "topic=alerts",
+             "-a",
+             "empty=",
+             "-a",
+             "equals=a=b",
+             "-a",
+             "escaped=one\\ntwo",
+             "-A",
+             "topic_device_fatal",
+             "--protect",
+             "topic_device_fatal",
+             m_dbFile->fileName(),
+             "/newuser-entry6"});
+    m_stderr->readLine(); // skip password prompt
+    QCOMPARE(m_stderr->readAll(), QByteArray("\n"));
+    QCOMPARE(m_stdout->readAll(),
+             QByteArray("Enter value for attribute topic_device_fatal: Successfully added entry newuser-entry6.\n"));
+
+    db = readDatabase();
+    entry = db->rootGroup()->findEntryByPath("/newuser-entry6");
+    QVERIFY(entry);
+    QCOMPARE(entry->attributes()->value("topic"), QString("alerts"));
+    QVERIFY(!entry->attributes()->isProtected("topic"));
+    QVERIFY(entry->attributes()->hasKey("empty"));
+    QCOMPARE(entry->attributes()->value("empty"), QString(""));
+    QCOMPARE(entry->attributes()->value("equals"), QString("a=b"));
+    // Unlike --notes, attribute values are not unescaped
+    QCOMPARE(entry->attributes()->value("escaped"), QString("one\\ntwo"));
+    QCOMPARE(entry->attributes()->value("topic_device_fatal"), QString("secretvalue"));
+    QVERIFY(entry->attributes()->isProtected("topic_device_fatal"));
+
+    // Round trip through show
+    Show showCmd;
+    setInput("a");
+    execCmd(showCmd, {"show", "-a", "topic", "-a", "topic_device_fatal", m_dbFile->fileName(), "/newuser-entry6"});
+    QCOMPARE(m_stdout->readAll(), QByteArray("alerts\nsecretvalue\n"));
+
+    // Attribute values are read after the database and entry passwords
+    setInput({"a", "token", "fatal"});
+    execCmd(addCmd,
+            {"add",
+             "-q",
+             "-p",
+             "-a",
+             "topic=alerts",
+             "-A",
+             "topic_device_fatal",
+             "--protect",
+             "topic_device_fatal",
+             m_dbFile->fileName(),
+             "/newuser-entry7"});
+    QCOMPARE(m_stderr->readAll(), QByteArray());
+    QCOMPARE(m_stdout->readAll(), QByteArray());
+
+    db = readDatabase();
+    entry = db->rootGroup()->findEntryByPath("/newuser-entry7");
+    QVERIFY(entry);
+    QCOMPARE(entry->password(), QString("token"));
+    QCOMPARE(entry->attributes()->value("topic_device_fatal"), QString("fatal"));
+    QVERIFY(entry->attributes()->isProtected("topic_device_fatal"));
+    QVERIFY(!entry->attributes()->isProtected("topic"));
+
+    // Unicode names and values
+    const QString unicodeName = QString::fromUtf8("th\xc3\xa8me");
+    const QString unicodeValue = QString::fromUtf8("\xc3\xa9t\xc3\xa9");
+    const QString unicodePromptName = QString::fromUtf8("\xe7\xa7\x98\xe5\xaf\x86");
+    const QString unicodePromptValue = QString::fromUtf8("\xe5\xaf\x86\xe7\xa0\x81\xc3\xa9");
+    setInput({"a", unicodePromptValue});
+    execCmd(addCmd,
+            {"add",
+             "-q",
+             "-a",
+             unicodeName + "=" + unicodeValue,
+             "-A",
+             unicodePromptName,
+             m_dbFile->fileName(),
+             "/newuser-entry-unicode"});
+    QCOMPARE(m_stderr->readAll(), QByteArray());
+    db = readDatabase();
+    entry = db->rootGroup()->findEntryByPath("/newuser-entry-unicode");
+    QVERIFY(entry);
+    QCOMPARE(entry->attributes()->value(unicodeName), unicodeValue);
+    QCOMPARE(entry->attributes()->value(unicodePromptName), unicodePromptValue);
+
+    // A prompted value can hold the TOTP settings
+    setInput({"a", "otpauth://totp/test?secret=GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ"});
+    execCmd(addCmd, {"add", "-q", "-A", "otp", "--protect", "otp", m_dbFile->fileName(), "/newuser-entry-totp"});
+    QCOMPARE(m_stderr->readAll(), QByteArray());
+    setInput("a");
+    execCmd(showCmd, {"show", "--totp", m_dbFile->fileName(), "/newuser-entry-totp"});
+    QVERIFY(isTotp(m_stdout->readAll()));
+
+    // Protecting a value given on the command line prints a warning
+    setInput("a");
+    execCmd(addCmd, {"add", "-q", "-a", "token=x", "--protect", "token", m_dbFile->fileName(), "/newuser-entry-warn"});
+    QVERIFY(m_stderr->readAll().contains("WARNING: The value of attribute token was given on the command line"));
+    db = readDatabase();
+    entry = db->rootGroup()->findEntryByPath("/newuser-entry-warn");
+    QVERIFY(entry);
+    QVERIFY(entry->attributes()->isProtected("token"));
+
+    // Invalid attribute options
+    setInput("a");
+    QCOMPARE(execCmd(addCmd, {"add", "-a", "secretvalue", m_dbFile->fileName(), "/newuser-entry8"}), EXIT_FAILURE);
+    QByteArray errorOutput = m_stderr->readAll();
+    QVERIFY(errorOutput.contains("Invalid attribute, expected the format attribute=value.\n"));
+    QVERIFY(!errorOutput.contains("secretvalue"));
+
+    setInput("a");
+    QCOMPARE(execCmd(addCmd, {"add", "-a", "=value", m_dbFile->fileName(), "/newuser-entry8"}), EXIT_FAILURE);
+    QVERIFY(m_stderr->readAll().contains("Attribute name cannot be empty.\n"));
+
+    setInput("a");
+    QCOMPARE(execCmd(addCmd, {"add", "-A", "", m_dbFile->fileName(), "/newuser-entry8"}), EXIT_FAILURE);
+    QVERIFY(m_stderr->readAll().contains("Attribute name cannot be empty.\n"));
+
+    // Default attributes and entry fields in any case, and passkey attributes, are reserved
+    const QStringList reservedNames = {"Password",
+                                       "password",
+                                       "USERNAME",
+                                       "title",
+                                       "url",
+                                       "notes",
+                                       "Uuid",
+                                       "uuid",
+                                       "Tags",
+                                       "TAGS",
+                                       "KPEX_PASSKEY_PRIVATE_KEY_PEM"};
+    for (const QString& name : reservedNames) {
+        setInput("a");
+        QCOMPARE(execCmd(addCmd, {"add", "-a", name + "=x", m_dbFile->fileName(), "/newuser-entry8"}), EXIT_FAILURE);
+        QVERIFY(m_stderr->readAll().contains(
+            QString("Cannot use reserved attribute %1 as a custom attribute.\n").arg(name).toUtf8()));
+    }
+
+    // Options are validated before any value is read, so only the database password is given
+    setInput("a");
+    QCOMPARE(execCmd(addCmd, {"add", "-A", "password", m_dbFile->fileName(), "/newuser-entry8"}), EXIT_FAILURE);
+    QVERIFY(m_stderr->readAll().contains("Cannot use reserved attribute password as a custom attribute.\n"));
+
+    setInput("a");
+    QCOMPARE(execCmd(addCmd, {"add", "--protect", "missing", m_dbFile->fileName(), "/newuser-entry8"}), EXIT_FAILURE);
+    QVERIFY(m_stderr->readAll().contains("Attribute \"missing\" not found.\n"));
+
+    // An attribute can only be given once
+    const QList<QStringList> repeatedOptions = {
+        {"-a", "k=1", "-a", "k=2"}, {"-a", "k=1", "-A", "k"}, {"-A", "k", "-A", "k"}};
+    for (const QStringList& options : repeatedOptions) {
+        setInput("a");
+        QCOMPARE(execCmd(addCmd, QStringList("add") + options + QStringList{m_dbFile->fileName(), "/newuser-entry8"}),
+                 EXIT_FAILURE);
+        QVERIFY(m_stderr->readAll().contains("Attribute k specified more than once.\n"));
+    }
+
+    // Running out of input fails without adding the entry
+    setInput("a");
+    QCOMPARE(execCmd(addCmd, {"add", "-q", "-A", "missing_value", m_dbFile->fileName(), "/newuser-entry8"}),
+             EXIT_FAILURE);
+    QVERIFY(m_stderr->readAll().contains("No value provided for attribute missing_value.\n"));
+
+    QVERIFY(!readDatabase()->rootGroup()->findEntryByPath("/newuser-entry8"));
 }
 
 void TestCli::testAddGroup()
@@ -1187,6 +1354,151 @@ void TestCli::testEdit()
     entry = db->rootGroup()->findEntryByPath("/evennewertitle");
     QVERIFY(entry);
     QCOMPARE(entry->notes(), QString("testing\nline breaks"));
+
+    // Custom attributes
+    setInput("a");
+    execCmd(
+        editCmd,
+        {"edit", "-a", "TestAttribute1=changed", "-a", "newattribute=new", m_dbFile->fileName(), "/evennewertitle"});
+    QCOMPARE(m_stdout->readAll(), QByteArray("Successfully edited entry evennewertitle.\n"));
+
+    db = readDatabase();
+    entry = db->rootGroup()->findEntryByPath("/evennewertitle");
+    QVERIFY(entry);
+    QCOMPARE(entry->attributes()->value("TestAttribute1"), QString("changed"));
+    QCOMPARE(entry->attributes()->value("testattribute1"), QString("a"));
+    QCOMPARE(entry->attributes()->value("newattribute"), QString("new"));
+    QVERIFY(!entry->attributes()->isProtected("newattribute"));
+    // The newest history item is the last one. This entry has been edited more often than the
+    // default history limit of 10 items, so check the content of that item rather than the count.
+    QCOMPARE(entry->historyItems().last()->notes(), QString("testing\nline breaks"));
+    QVERIFY(!entry->historyItems().last()->attributes()->hasKey("newattribute"));
+
+    setInput("a");
+    execCmd(editCmd, {"edit", "--protect", "newattribute", m_dbFile->fileName(), "/evennewertitle"});
+    db = readDatabase();
+    entry = db->rootGroup()->findEntryByPath("/evennewertitle");
+    QVERIFY(entry);
+    QCOMPARE(entry->attributes()->value("newattribute"), QString("new"));
+    QVERIFY(entry->attributes()->isProtected("newattribute"));
+
+    // Changing the value keeps the protection
+    setInput("a");
+    execCmd(editCmd, {"edit", "-a", "newattribute=inline", m_dbFile->fileName(), "/evennewertitle"});
+    db = readDatabase();
+    entry = db->rootGroup()->findEntryByPath("/evennewertitle");
+    QVERIFY(entry);
+    QCOMPARE(entry->attributes()->value("newattribute"), QString("inline"));
+    QVERIFY(entry->attributes()->isProtected("newattribute"));
+
+    setInput({"a", "prompted"});
+    execCmd(editCmd, {"edit", "-A", "newattribute", m_dbFile->fileName(), "/evennewertitle"});
+    db = readDatabase();
+    entry = db->rootGroup()->findEntryByPath("/evennewertitle");
+    QVERIFY(entry);
+    QCOMPARE(entry->attributes()->value("newattribute"), QString("prompted"));
+    QVERIFY(entry->attributes()->isProtected("newattribute"));
+    QCOMPARE(entry->historyItems().last()->attributes()->value("newattribute"), QString("inline"));
+
+    // Protecting an already protected attribute does not add a history item
+    int historyCount = entry->historyItems().size();
+    setInput("a");
+    QCOMPARE(execCmd(editCmd, {"edit", "--protect", "newattribute", m_dbFile->fileName(), "/evennewertitle"}),
+             EXIT_SUCCESS);
+    db = readDatabase();
+    entry = db->rootGroup()->findEntryByPath("/evennewertitle");
+    QVERIFY(entry);
+    QVERIFY(entry->attributes()->isProtected("newattribute"));
+    QCOMPARE(entry->historyItems().size(), historyCount);
+    QCOMPARE(entry->historyItems().last()->attributes()->value("newattribute"), QString("inline"));
+
+    // Removing the protection
+    setInput("a");
+    QCOMPARE(execCmd(editCmd, {"edit", "--unprotect", "newattribute", m_dbFile->fileName(), "/evennewertitle"}),
+             EXIT_SUCCESS);
+    db = readDatabase();
+    entry = db->rootGroup()->findEntryByPath("/evennewertitle");
+    QVERIFY(entry);
+    QCOMPARE(entry->attributes()->value("newattribute"), QString("prompted"));
+    QVERIFY(!entry->attributes()->isProtected("newattribute"));
+
+    setInput("a");
+    QCOMPARE(execCmd(editCmd,
+                     {"edit",
+                      "--protect",
+                      "newattribute",
+                      "--unprotect",
+                      "newattribute",
+                      m_dbFile->fileName(),
+                      "/evennewertitle"}),
+             EXIT_FAILURE);
+    QVERIFY(m_stderr->readAll().contains("Cannot both protect and unprotect attribute newattribute.\n"));
+
+    setInput("a");
+    QCOMPARE(execCmd(editCmd, {"edit", "--unprotect", "doesnotexist", m_dbFile->fileName(), "/evennewertitle"}),
+             EXIT_FAILURE);
+    QVERIFY(m_stderr->readAll().contains("Attribute \"doesnotexist\" not found.\n"));
+
+    // The entry password is read before the attribute values
+    setInput({"a", "entrypassword", "attributevalue"});
+    execCmd(editCmd, {"edit", "-p", "-A", "newattribute", m_dbFile->fileName(), "/evennewertitle"});
+    QCOMPARE(m_stdout->readAll(),
+             QByteArray("Enter new password for entry: Enter value for attribute newattribute: "
+                        "Successfully edited entry evennewertitle.\n"));
+    db = readDatabase();
+    entry = db->rootGroup()->findEntryByPath("/evennewertitle");
+    QVERIFY(entry);
+    QCOMPARE(entry->password(), QString("entrypassword"));
+    QCOMPARE(entry->attributes()->value("newattribute"), QString("attributevalue"));
+
+    // Running out of input keeps the existing value
+    setInput("a");
+    QCOMPARE(execCmd(editCmd, {"edit", "-A", "newattribute", m_dbFile->fileName(), "/evennewertitle"}), EXIT_FAILURE);
+    QVERIFY(m_stderr->readAll().contains("No value provided for attribute newattribute.\n"));
+    QVERIFY(!m_stdout->readAll().contains("Successfully edited entry"));
+    db = readDatabase();
+    entry = db->rootGroup()->findEntryByPath("/evennewertitle");
+    QVERIFY(entry);
+    QCOMPARE(entry->attributes()->value("newattribute"), QString("attributevalue"));
+
+    setInput("a");
+    QCOMPARE(execCmd(editCmd, {"edit", "--protect", "doesnotexist", m_dbFile->fileName(), "/evennewertitle"}),
+             EXIT_FAILURE);
+    QVERIFY(m_stderr->readAll().contains("Attribute \"doesnotexist\" not found.\n"));
+
+    // Rejected options do not change the entry
+    historyCount = entry->historyItems().size();
+    const QStringList rejectedOptions = {"Title=x", "password=x", "UUID=x", "tags=x", "KPEX_PASSKEY_USERNAME=x"};
+    for (const QString& option : rejectedOptions) {
+        setInput("a");
+        QCOMPARE(execCmd(editCmd, {"edit", "-a", option, m_dbFile->fileName(), "/evennewertitle"}), EXIT_FAILURE);
+        QVERIFY(m_stderr->readAll().contains(
+            QString("Cannot use reserved attribute %1 as a custom attribute.\n").arg(option.chopped(2)).toUtf8()));
+    }
+
+    setInput("a");
+    QCOMPARE(execCmd(editCmd,
+                     {"edit", "-a", "newattribute=1", "-A", "newattribute", m_dbFile->fileName(), "/evennewertitle"}),
+             EXIT_FAILURE);
+    QVERIFY(m_stderr->readAll().contains("Attribute newattribute specified more than once.\n"));
+
+    db = readDatabase();
+    entry = db->rootGroup()->findEntryByPath("/evennewertitle");
+    QVERIFY(entry);
+    QCOMPARE(entry->title(), QString("evennewertitle"));
+    QCOMPARE(entry->password(), QString("entrypassword"));
+    QCOMPARE(entry->attributes()->value("newattribute"), QString("attributevalue"));
+    QCOMPARE(entry->attributes()->value("TestAttribute1"), QString("changed"));
+    QVERIFY(!entry->attributes()->hasKey("password"));
+    QVERIFY(!entry->attributes()->hasKey("KPEX_PASSKEY_USERNAME"));
+    QCOMPARE(entry->historyItems().size(), historyCount);
+    QCOMPARE(entry->historyItems().last()->password(), QString("newpassword"));
+
+    // The lowercase spelling still resolves to the entry password
+    Show showCmd;
+    setInput("a");
+    execCmd(showCmd, {"show", "-a", "password", m_dbFile->fileName(), "/evennewertitle"});
+    QCOMPARE(m_stdout->readAll(), QByteArray("entrypassword\n"));
 }
 
 void TestCli::testEstimate_data()

@@ -20,6 +20,8 @@
 
 #include "DatabaseCommand.h"
 
+class Entry;
+
 class Add : public DatabaseCommand
 {
 public:
@@ -32,6 +34,18 @@ public:
     static const QCommandLineOption NotesOption;
     static const QCommandLineOption PasswordPromptOption;
     static const QCommandLineOption GenerateOption;
+    static const QCommandLineOption AttributeOption;
+    static const QCommandLineOption AttributePromptOption;
+    static const QCommandLineOption ProtectOption;
+
+    static bool validateAttributeOptions(QSharedPointer<QCommandLineParser> parser,
+                                         Entry* entry = nullptr,
+                                         const QStringList& unprotectedNames = {});
+    static bool readAttributeValues(QSharedPointer<QCommandLineParser> parser, QList<QPair<QString, QString>>& values);
+    static void setAttributes(Entry* entry,
+                              QSharedPointer<QCommandLineParser> parser,
+                              const QList<QPair<QString, QString>>& values,
+                              const QStringList& unprotectedNames = {});
 };
 
 #endif // KEEPASSXC_ADD_H

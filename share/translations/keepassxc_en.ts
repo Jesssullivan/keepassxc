@@ -7672,6 +7672,22 @@ Do you want to overwrite it?</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <source>Set a custom attribute of the entry. This option can be specified more than once.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>attribute=value</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Prompt for the value of a custom attribute of the entry. This option can be specified more than once.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Protect a custom attribute of the entry. This option can be specified more than once.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Add a new entry to a database.</source>
         <translation type="unfinished"></translation>
     </message>
@@ -7697,6 +7713,38 @@ Do you want to overwrite it?</source>
     </message>
     <message>
         <source>Successfully added entry %1.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Invalid attribute, expected the format attribute=value.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Cannot use reserved attribute %1 as a custom attribute.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Attribute %1 specified more than once.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Cannot both protect and unprotect attribute %1.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>WARNING: The value of attribute %1 was given on the command line, where it can be visible to other processes and kept in the shell history. Use -A to enter it at a prompt instead.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>No value provided for attribute %1.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Attribute name cannot be empty.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Enter value for attribute %1: </source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -8211,6 +8259,10 @@ Do you want to overwrite it?</source>
     </message>
     <message>
         <source>title</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Unprotect a custom attribute of the entry. This option can be specified more than once.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>

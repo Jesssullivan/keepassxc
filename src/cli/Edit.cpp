@@ -29,6 +29,11 @@
 const QCommandLineOption Edit::TitleOption =
     QCommandLineOption(QStringList() << "t" << "title", QObject::tr("Title for the entry."), QObject::tr("title"));
 
+const QCommandLineOption Edit::UnprotectOption = QCommandLineOption(
+    QStringList() << "unprotect",
+    QObject::tr("Unprotect a custom attribute of the entry. This option can be specified more than once."),
+    QObject::tr("attribute"));
+
 Edit::Edit()
 {
     name = QString("edit");
@@ -38,7 +43,11 @@ Edit::Edit()
     options.append(Add::UrlOption);
     options.append(Add::NotesOption);
     options.append(Add::PasswordPromptOption);
+    options.append(Add::AttributeOption);
+    options.append(Add::AttributePromptOption);
+    options.append(Add::ProtectOption);
     options.append(Edit::TitleOption);
+    options.append(Edit::UnprotectOption);
     positionalArguments.append({QString("entry"), QObject::tr("Path of the entry to edit."), QString("")});
 
     // Password generation options.
@@ -91,8 +100,30 @@ int Edit::executeWithDatabase(QSharedPointer<Database> database, QSharedPointer<
     QString notes = parser->value(Add::NotesOption);
     QString title = parser->value(Edit::TitleOption);
     bool prompt = parser->isSet(Add::PasswordPromptOption);
-    if (username.isEmpty() && url.isEmpty() && notes.isEmpty() && title.isEmpty() && !prompt && !generate) {
+    const QStringList unprotectedNames = parser->values(Edit::UnprotectOption);
+    bool attributes = parser->isSet(Add::AttributeOption) || parser->isSet(Add::AttributePromptOption)
+                      || parser->isSet(Add::ProtectOption) || !unprotectedNames.isEmpty();
+    if (username.isEmpty() && url.isEmpty() && notes.isEmpty() && title.isEmpty() && !prompt && !generate
+        && !attributes) {
         err << QObject::tr("Not changing any field for entry %1.").arg(entryPath) << Qt::endl;
+        return EXIT_FAILURE;
+    }
+
+    if (!Add::validateAttributeOptions(parser, entry, unprotectedNames)) {
+        return EXIT_FAILURE;
+    }
+
+    // Read all input before changing the entry, so that running out of input leaves it untouched
+    QString password;
+    if (prompt) {
+        out << QObject::tr("Enter new password for entry: ") << Qt::flush;
+        password = Utils::getPassword(parser->isSet(Command::QuietOption));
+    } else if (generate) {
+        password = passwordGenerator->generatePassword();
+    }
+
+    QList<QPair<QString, QString>> attributeValues;
+    if (!Add::readAttributeValues(parser, attributeValues)) {
         return EXIT_FAILURE;
     }
 
@@ -114,14 +145,11 @@ int Edit::executeWithDatabase(QSharedPointer<Database> database, QSharedPointer<
         entry->setUrl(url);
     }
 
-    if (prompt) {
-        out << QObject::tr("Enter new password for entry: ") << Qt::flush;
-        QString password = Utils::getPassword(parser->isSet(Command::QuietOption));
-        entry->setPassword(password);
-    } else if (generate) {
-        QString password = passwordGenerator->generatePassword();
+    if (prompt || generate) {
         entry->setPassword(password);
     }
+
+    Add::setAttributes(entry, parser, attributeValues, unprotectedNames);
 
     entry->endUpdate();
 
